@@ -1,166 +1,91 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useUser } from '@clerk/nextjs';
-import { ContentEditor } from '@/components/ContentEditor';
-import { FileUploadPanel } from '@/components/FileUploadPanel';
+import { useEffect, useState } from 'react';
+import { EditorContent, useEditor } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Underline from '@tiptap/extension-underline';
+import Link from '@tiptap/extension-link';
+import TextAlign from '@tiptap/extension-text-align';
+import TextStyle from '@tiptap/extension-text-style';
+import { Extension } from '@tiptap/core';
 
-type UserRecord = {
-  id: string;
-  name: string;
-  email: string;
-  status: string;
-  createdAt: string;
-};
+const FontSize = Extension.create({
+  name: 'fontSize',
+  addGlobalAttributes() {
+    return [{ types: ['textStyle'], attributes: {
+      fontSize: {
+        default: null,
+        parseHTML: (element) => (element as HTMLElement).style.fontSize || null,
+        renderHTML: (attributes) => attributes.fontSize ? { style: `font-size: ${attributes.fontSize}` } : {},
+      },
+    } }];
+  },
+});
 
-export function AdminDashboard() {
-  const { user } = useUser();
-  const [signupEnabled, setSignupEnabled] = useState(true);
-  const [users, setUsers] = useState<UserRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+const DEFAULT_HTML = '<h1>Welcome to Carnival</h1><p>Edit this page with headings, lists, font sizes, links, and text styles.</p>';
+const allowedUrl = (value: string) => /^(https?:|mailto:)/i.test(value.trim());
+
+export function ContentEditor() {
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [url, setUrl] = useState('');
+  const editor = useEditor({
+    extensions: [StarterKit, Underline, TextStyle, FontSize, TextAlign.configure({ types: ['heading', 'paragraph'] }), Link.configure({ openOnClick: false, protocols: ['http', 'https', 'mailto'] })],
+    content: DEFAULT_HTML,
+    editorProps: { attributes: { class: 'editor-content' } },
+  });
 
   useEffect(() => {
-    async function loadData() {
-      const settingsRes = await fetch('/api/admin/settings');
-      const settingsData = await settingsRes.json();
-      setSignupEnabled(Boolean(settingsData.signupEnabled));
+    if (!editor) return;
+    void fetch('/api/page-content').then((r) => r.json()).then((data) => {
+      if (typeof data.html === 'string') editor.commands.setContent(data.html);
+    }).catch(() => setMessage('Could not load saved page content.'));
+  }, [editor]);
 
-      const usersRes = await fetch('/api/admin/users');
-      const usersData = await usersRes.json();
-      setUsers(usersData.users || []);
-      setIsLoading(false);
-    }
+  if (!editor) return null;
 
-    loadData();
-  }, []);
-
-  const activeCount = useMemo(
-    () => users.filter((entry) => entry.status !== 'banned' && entry.status !== 'deactivated').length,
-    [users]
-  );
-
-  async function toggleSignup() {
-    const nextValue = !signupEnabled;
-    setSignupEnabled(nextValue);
-    const res = await fetch('/api/admin/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ signupEnabled: nextValue }),
-    });
-    await res.json();
+  async function saveContent() {
+    setSaving(true); setMessage('');
+    try {
+      const response = await fetch('/api/page-content', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ html: editor.getHTML() }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Save failed.');
+      setMessage('Page saved.');
+    } catch (e) { setMessage(e instanceof Error ? e.message : 'Save failed.'); }
+    finally { setSaving(false); }
   }
 
-  async function updateUserAction(userId: string, action: string) {
-    const res = await fetch('/api/admin/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, action }),
-    });
-    const data = await res.json();
-
-    if (data.ok || data.fallback) {
-      setUsers((current) =>
-        current.map((entry) =>
-          entry.id === userId
-            ? {
-                ...entry,
-                status: action === 'ban' ? 'banned' : action === 'deactivate' ? 'deactivated' : action === 'reactivate' || action === 'unban' ? 'active' : entry.status,
-              }
-            : entry
-        )
-      );
-    }
+  function setFontSize(size: string) {
+    editor.chain().focus().setMark('textStyle', { fontSize: size }).run();
   }
 
-  return (
-    <div className="admin-grid">
-      <div className="stack">
-        <div className="panel">
-          <h2>Account control</h2>
-          <div className="toggle-row">
-            <div>
-              <strong>{signupEnabled ? 'Sign up allowed' : 'Sign up blocked'}</strong>
-              <div className="inline-note">Manage self-registration settings.</div>
-            </div>
-            <button
-              className={`toggle ${signupEnabled ? 'enabled' : ''}`}
-              onClick={toggleSignup}
-              aria-label="Toggle sign up"
-            >
-              <span className="knob" />
-            </button>
-          </div>
+  function addLink() {
+    if (!allowedUrl(url)) { setMessage('Enter a valid http, https, or mailto link.'); return; }
+    editor.chain().focus().extendMarkRange('link').setLink({ href: url.trim() }).run();
+    setUrl('');
+  }
 
-          <div className="stat-row">
-            <div className="stat-card">
-              <span className="label">Total users</span>
-              <span className="value">{users.length || 0}</span>
-            </div>
-            <div className="stat-card">
-              <span className="label">Active</span>
-              <span className="value">{activeCount}</span>
-            </div>
-            <div className="stat-card">
-              <span className="label">Admin</span>
-              <span className="value">{user?.emailAddresses?.[0]?.emailAddress === 'troy@troysmithson.com' ? 'Yes' : 'Yes'}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="table-wrap">
-          <h2>User administration</h2>
-          {isLoading ? (
-            <div className="empty-state">Loading users…</div>
-          ) : users.length === 0 ? (
-            <div className="empty-state">No users found.</div>
-          ) : (
-            <table className="user-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((entry) => (
-                  <tr key={entry.id}>
-                    <td>{entry.name}</td>
-                    <td>{entry.email}</td>
-                    <td>
-                      <span className={`status-badge ${entry.status === 'active' ? 'status-active' : entry.status === 'banned' ? 'status-banned' : 'status-deactivated'}`}>
-                        {entry.status}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="user-actions">
-                        <button className="action-btn" onClick={() => updateUserAction(entry.id, 'deactivate')}>
-                          Deactivate
-                        </button>
-                        <button className="action-btn danger" onClick={() => updateUserAction(entry.id, 'ban')}>
-                          Ban
-                        </button>
-                        <button className="action-btn warning" onClick={() => updateUserAction(entry.id, 'reactivate')}>
-                          Reactivate
-                        </button>
-                        <button className="action-btn" onClick={() => updateUserAction(entry.id, 'reset-password')}>
-                          Reset password
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-
-      <div className="stack">
-        <ContentEditor />
-        <FileUploadPanel />
-      </div>
+  return <section className="editor-wrap">
+    <h2>Home page editor</h2>
+    <div className="editor-toolbar" aria-label="Text formatting">
+      <button type="button" onClick={() => editor.chain().focus().toggleBold().run()}>Bold</button>
+      <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()}>Italic</button>
+      <button type="button" onClick={() => editor.chain().focus().toggleUnderline().run()}>Underline</button>
+      <button type="button" onClick={() => editor.chain().focus().toggleStrike().run()}>Strikethrough</button>
+      <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>H1</button>
+      <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>H2</button>
+      <button type="button" onClick={() => editor.chain().focus().toggleBulletList().run()}>Bullets</button>
+      <button type="button" onClick={() => editor.chain().focus().toggleOrderedList().run()}>Numbered list</button>
+      <button type="button" onClick={() => setFontSize('12px')}>12px</button>
+      <button type="button" onClick={() => setFontSize('16px')}>16px</button>
+      <button type="button" onClick={() => setFontSize('22px')}>22px</button>
+      <button type="button" onClick={() => editor.chain().focus().unsetMark('textStyle').run()}>Clear size</button>
+      <button type="button" onClick={() => editor.chain().focus().setTextAlign('left').run()}>Left</button>
+      <button type="button" onClick={() => editor.chain().focus().setTextAlign('center').run()}>Center</button>
+      <button type="button" onClick={() => editor.chain().focus().setTextAlign('right').run()}>Right</button>
     </div>
-  );
+    <EditorContent editor={editor} />
+    <div className="link-input"><input className="input" type="url" placeholder="https://example.com" value={url} onChange={(event) => setUrl(event.target.value)} /><button type="button" className="secondary-btn" onClick={addLink}>Add link</button><button type="button" className="ghost-btn" onClick={() => editor.chain().focus().unsetLink().run()}>Remove link</button></div>
+    <div className="cta-row"><button type="button" className="primary-btn" onClick={saveContent} disabled={saving}>{saving ? 'Saving…' : 'Save page'}</button>{message && <span role="status" className="inline-note">{message}</span>}</div>
+  </section>;
 }

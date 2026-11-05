@@ -1,62 +1,40 @@
 import { promises as fs } from 'fs';
 import path from 'path';
+import sanitizeHtml from 'sanitize-html';
 
-export const DEFAULT_ADMIN_EMAILS = ['troy@troysmithson.com'];
+const contentPath = path.join(process.cwd(), 'data', 'site-content.json');
+const defaultHtml = '<h1>Welcome to Carnival</h1><p>Your editable landing page content.</p>';
 
-export function getAdminEmails() {
-  const configured = (process.env.ADMIN_EMAILS ?? '')
-    .split(',')
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean);
-
-  return [...DEFAULT_ADMIN_EMAILS, ...configured];
-}
-
-export function isAdminEmail(email: string | null | undefined) {
-  if (!email) return false;
-  const normalized = email.trim().toLowerCase();
-  return getAdminEmails().includes(normalized);
+export function sanitizePageHtml(html: string) {
+  return sanitizeHtml(html, {
+    allowedTags: [
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'strong', 'b', 'em', 'i',
+      'u', 's', 'strike', 'del', 'blockquote', 'ul', 'ol', 'li', 'a', 'span', 'pre', 'code',
+    ],
+    allowedAttributes: {
+      a: ['href', 'target', 'rel'],
+      span: ['style'],
+      p: ['style'],
+      h1: ['style'], h2: ['style'], h3: ['style'], h4: ['style'],
+    },
+    allowedStyles: {
+      '*': {
+        'font-size': [/^(?:[1-9]|[1-6][0-9]|7[0-2])(?:px|pt|em|rem|%)$/],
+        'text-align': [/^(?:left|right|center|justify)$/],
+      },
+    },
+    allowedSchemes: ['http', 'https', 'mailto'],
+    transformTags: {
+      a: sanitizeHtml.simpleTransform('a', { rel: 'noopener noreferrer' }, true),
+    },
+  });
 }
 
 export async function readSiteContent() {
-  const filePath = path.join(process.cwd(), 'data', 'site-content.json');
   try {
-    const raw = await fs.readFile(filePath, 'utf8');
-    return JSON.parse(raw) as { html: string };
+    const parsed = JSON.parse(await fs.readFile(contentPath, 'utf8')) as { html?: unknown };
+    return { html: sanitizePageHtml(typeof parsed.html === 'string' ? parsed.html : defaultHtml) };
   } catch {
-    const fallback = {
-      html: '<h1>Welcome to Carnival</h1><p>Your editable landing page content.</p>',
-    };
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(fallback, null, 2));
-    return fallback;
+    return { html: defaultHtml };
   }
-}
-
-export async function writeSiteContent(html: string) {
-  const filePath = path.join(process.cwd(), 'data', 'site-content.json');
-  const payload = { html };
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, JSON.stringify(payload, null, 2));
-  return payload;
-}
-
-export async function readSettings() {
-  const filePath = path.join(process.cwd(), 'data', 'settings.json');
-  try {
-    const raw = await fs.readFile(filePath, 'utf8');
-    return JSON.parse(raw) as { signupEnabled: boolean };
-  } catch {
-    const fallback = { signupEnabled: true };
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(fallback, null, 2));
-    return fallback;
-  }
-}
-
-export async function writeSettings(settings: { signupEnabled: boolean }) {
-  const filePath = path.join(process.cwd(), 'data', 'settings.json');
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, JSON.stringify(settings, null, 2));
-  return settings;
 }

@@ -1,44 +1,18 @@
 import { NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
+import { getAdminContext } from '@/lib/admin';
 
-const uploadDir = path.join(process.cwd(), 'public', 'files');
-
-export async function POST(request: Request) {
-  const formData = await request.formData();
-  const file = formData.get('file') as File | null;
-
-  if (!file) {
-    return NextResponse.json({ error: 'Missing file' }, { status: 400 });
-  }
-
-  const fileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
-  const bytes = Buffer.from(await file.arrayBuffer());
-
-  await fs.mkdir(uploadDir, { recursive: true });
-  await fs.writeFile(path.join(uploadDir, fileName), bytes);
-
-  return NextResponse.json({
-    ok: true,
-    file: { name: fileName, url: `/files/${encodeURIComponent(fileName)}` },
-  });
+/** File uploads have been intentionally disabled and removed from the admin app. */
+export async function GET() {
+  if (!(await getAdminContext())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  return NextResponse.json({ files: [] });
 }
 
-export async function GET() {
-  try {
-    const files = await fs.readdir(uploadDir);
-    const entries = await Promise.all(
-      files
-        .filter((name) => !name.startsWith('.'))
-        .map(async (name) => ({
-          name,
-          url: `/files/${encodeURIComponent(name)}`,
-          size: (await fs.stat(path.join(uploadDir, name))).size,
-        }))
-    );
+export async function POST() {
+  if (!(await getAdminContext())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  return NextResponse.json({ error: 'File uploads are disabled.' }, { status: 410 });
+}
 
-    return NextResponse.json({ files: entries });
-  } catch {
-    return NextResponse.json({ files: [] });
-  }
+export async function DELETE() {
+  if (!(await getAdminContext())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  return NextResponse.json({ error: 'File uploads are disabled.' }, { status: 410 });
 }
