@@ -60,8 +60,6 @@ export function ContentEditor() {
   if (!editor) return null;
 
   async function saveContent() {
-    // useEditor() may return null during initialization; check again in this
-    // callback so TypeScript and runtime both know the editor is available.
     if (!editor) return;
     setSaving(true);
     setMessage('');
@@ -109,7 +107,7 @@ export function ContentEditor() {
         <button type="button" onClick={() => setFontSize('12px')}>12px</button>
         <button type="button" onClick={() => setFontSize('16px')}>16px</button>
         <button type="button" onClick={() => setFontSize('22px')}>22px</button>
-        <button type="button' onClick={() => editor.chain().focus().unsetMark('textStyle').run()}>Clear size</button>
+        <button type="button" onClick={() => editor.chain().focus().unsetMark('textStyle').run()}>Clear size</button>
         <button type="button" onClick={() => editor.chain().focus().setTextAlign('left').run()}>Left</button>
         <button type="button" onClick={() => editor.chain().focus().setTextAlign('center').run()}>Center</button>
         <button type="button" onClick={() => editor.chain().focus().setTextAlign('right').run()}>Right</button>
