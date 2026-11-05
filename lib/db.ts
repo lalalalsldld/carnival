@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 
+type AppDataRow = { value: unknown };
 let client: ReturnType<typeof neon> | undefined;
 
 export function db() {
@@ -19,7 +20,10 @@ export async function ensureAppDataTable() {
 
 export async function readAppData<T>(key: string, fallback: T): Promise<T> {
   await ensureAppDataTable();
-  const rows = await db()`SELECT value FROM carnival_app_data WHERE key = ${key} LIMIT 1`;
+  const result = await db()`SELECT value FROM carnival_app_data WHERE key = ${key} LIMIT 1`;
+  // Neon exposes rows as an array, but its broad return type also covers
+  // full-query results. Narrow the response before indexing it.
+  const rows = result as unknown as AppDataRow[];
   return (rows[0]?.value as T | undefined) ?? fallback;
 }
 
