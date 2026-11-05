@@ -1,22 +1,22 @@
-import { promises as fs } from 'fs';
-import path from 'path';
+'use client';
 
-export async function readSettings() {
-  const filePath = path.join(process.cwd(), 'data', 'settings.json');
-  try {
-    const raw = await fs.readFile(filePath, 'utf8');
-    return JSON.parse(raw) as { signupEnabled: boolean };
-  } catch {
-    const fallback = { signupEnabled: true };
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(fallback, null, 2));
-    return fallback;
-  }
-}
+import Link from 'next/link';
+import { SignedIn, SignedOut, SignInButton, SignUpButton } from '@clerk/nextjs';
 
-export async function writeSettings(settings: { signupEnabled: boolean }) {
-  const filePath = path.join(process.cwd(), 'data', 'settings.json');
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, JSON.stringify(settings, null, 2));
-  return settings;
+export function HeaderActions() {
+  return (
+    <>
+      <SignedOut>
+        <SignInButton mode="modal">
+          <button className="primary-btn">Sign in</button>
+        </SignInButton>
+        <SignUpButton mode="modal">
+          <button className="secondary-btn">Create account</button>
+        </SignUpButton>
+      </SignedOut>
+      <SignedIn>
+        <Link href="/admin" className="primary-btn">Open admin</Link>
+      </SignedIn>
+    </>
+  );
 }
