@@ -8,7 +8,8 @@ export function getAdminEmails() {
     .split(',')
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean);
-  return [...new Set([...DEFAULT_ADMIN_EMAILS, ...configured])];
+  const combined = [...DEFAULT_ADMIN_EMAILS, ...configured];
+  return combined.filter((email, index) => combined.indexOf(email) === index);
 }
 
 export function isAdminEmail(email: string | null | undefined) {
