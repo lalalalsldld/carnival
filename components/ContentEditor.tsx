@@ -60,14 +60,15 @@ export function ContentEditor() {
   if (!editor) return null;
 
   async function saveContent() {
-    if (!editor) return;
+    const currentEditor = editor;
+    if (!currentEditor) return;
     setSaving(true);
     setMessage('');
     try {
       const response = await fetch('/api/page-content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ html: editor.getHTML() }),
+        body: JSON.stringify({ html: currentEditor.getHTML() }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Save failed.');
@@ -80,15 +81,19 @@ export function ContentEditor() {
   }
 
   function setFontSize(size: string) {
-    editor.chain().focus().setMark('textStyle', { fontSize: size }).run();
+    const currentEditor = editor;
+    if (!currentEditor) return;
+    currentEditor.chain().focus().setMark('textStyle', { fontSize: size }).run();
   }
 
   function addLink() {
+    const currentEditor = editor;
+    if (!currentEditor) return;
     if (!allowedUrl(url)) {
       setMessage('Enter a valid http, https, or mailto link.');
       return;
     }
-    editor.chain().focus().extendMarkRange('link').setLink({ href: url.trim() }).run();
+    currentEditor.chain().focus().extendMarkRange('link').setLink({ href: url.trim() }).run();
     setUrl('');
   }
 
